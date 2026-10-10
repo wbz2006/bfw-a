@@ -119,6 +119,7 @@ modules/key/key.c \
 modules/vtx/vt02_control.c \
 modules/jam_detector/jam_detector.c \
 modules/heat_control/heat_control.c \
+modules/jscope/jscope.c \
 application/gimbal/gimbal.c \
 application/chassis/chassis.c \
 application/shoot/shoot.c \
@@ -258,6 +259,7 @@ C_INCLUDES =  \
 -Imodules/vtx \
 -Imodules/jam_detector \
 -Imodules/heat_control \
+-Imodules/jscope \
 -Imodules \
 -ICore/Inc
 
