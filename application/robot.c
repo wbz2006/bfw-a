@@ -1,7 +1,7 @@
 #include "bsp_init.h"
 #include "robot.h"
 #include "robot_def.h"
-
+#include "jscope.h"
 #include "chassis.h"
 #include "gimbal.h"
 #include "shoot.h"
@@ -15,7 +15,7 @@ void RobotInit()
     __disable_irq();
     
     BSPInit();
-   
+    JScopeInit();
     RobotCMDInit();
     GimbalInit();
     ShootInit();

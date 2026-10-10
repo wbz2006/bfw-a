@@ -18,6 +18,7 @@
 #include "message_center.h"
 #include "referee_task.h"
 #include "heat_control.h"
+#include "jscope.h"
 
 #include <math.h>
 #include "general_def.h"
@@ -300,14 +301,15 @@ void ChassisTask()
             .current_heat = referee_data->PowerHeatData.shooter_17mm_1_barrel_heat,
             .heat_limit = referee_data->GameRobotState.shooter_barrel_heat_limit,
             .cooling_rate = referee_data->GameRobotState.shooter_barrel_cooling_value,
-            .valid = (RefereeIsOnline() &&
-                      referee_data->GameRobotState.shooter_barrel_heat_limit > 0U),
+            .valid = (RefereeIsOnline() && referee_data->GameRobotState.shooter_barrel_heat_limit > 0U),
         };
         do
         {
             heat_publish_elapsed -= HEAT_CONTROL_SETTLE_PERIOD_S;
         } while (heat_publish_elapsed >= HEAT_CONTROL_SETTLE_PERIOD_S);
         PubPushMessage(heat_data_pub, (void *)&heat_data);
+
+        JScopePrintf("%f %f %f %f", (float)heat_data.heat_limit, (float)heat_data.current_heat, 0.0f, 0.0f);
     }
 #endif
 

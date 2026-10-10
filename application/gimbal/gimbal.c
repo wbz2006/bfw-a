@@ -4,11 +4,12 @@
 #include "mpu6500.h"
 #include "message_center.h"
 #include "general_def.h"
-#include "SEGGER_RTT.h"
+#include "jscope.h"
 
 
 static attitude_t *gimbal_IMU_data; // 云台IMU数据
 static DJIMotorInstance *yaw_motor, *pitch_motor;
+volatile int jscope_result;
 
 static Publisher_t *gimbal_pub;                   // 云台应用消息发布者(云台反馈给cmd)
 static Subscriber_t *gimbal_sub;                  // cmd控制消息订阅者
@@ -16,46 +17,9 @@ static Gimbal_Upload_Data_s gimbal_feedback_data; // 回传给cmd的云台状态
 static Gimbal_Ctrl_Cmd_s gimbal_cmd_recv;         // 来自cmd的控制信息
 
 
-#define JSCOPE_CH  1
-
-static char jscope_buf[1024];
-
-typedef struct {
-    float pitch;
-    float yaw;
-    float tar_pitch;
-    float tar_yaw;
-} JScopeData_t;
-
-void JScope_Init(void)
-{
-    SEGGER_RTT_ConfigUpBuffer(
-        JSCOPE_CH,
-        "JScope_f4f4f4f4",
-        jscope_buf,
-        sizeof(jscope_buf),
-        SEGGER_RTT_MODE_NO_BLOCK_SKIP
-    );
-}
-
-void JScope_Send(void)
-{
-    JScopeData_t data;
-
-
-    data.pitch = gimbal_IMU_data->Pitch;
-    data.yaw = gimbal_IMU_data->Yaw;
-    data.tar_pitch = gimbal_cmd_recv.pitch;
-    data.tar_yaw = gimbal_cmd_recv.yaw;
-
-
-    SEGGER_RTT_Write(JSCOPE_CH, &data, sizeof(data));
-}
-
 void GimbalInit()
 {   
     gimbal_IMU_data = INS_Init(); // IMU先初始化,获取姿态数据指针赋给yaw电机的其他数据来源
-    JScope_Init();
     // YAW
     Motor_Init_Config_s yaw_config = {
         .can_init_config = {
@@ -181,7 +145,6 @@ void GimbalTask()
     default:
         break;
     }
-    JScope_Send();
     //SEGGER_RTT_printf(0,"0:%d,1:%d,2:%d\n",(int16_t)gimbal_IMU_data->Gyro[0], (int16_t)gimbal_IMU_data->Gyro[1],(int16_t)gimbal_IMU_data->Gyro[2]);
 
     // 在合适的地方添加pitch重力补偿前馈力矩
