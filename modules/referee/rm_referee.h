@@ -32,6 +32,10 @@ typedef struct
 	ext_supply_projectile_action_t SupplyProjectileAction; // 0x0102
 	ext_game_robot_state_t GameRobotState;				   // 0x0201
 	ext_power_heat_data_t PowerHeatData;				   // 0x0202
+	uint32_t GameRobotStateUpdateMs;
+	uint32_t PowerHeatDataUpdateMs;
+	uint8_t GameRobotStateValid;
+	uint8_t PowerHeatDataValid;
 	ext_game_robot_pos_t GameRobotPos;					   // 0x0203
 	ext_buff_musk_t BuffMusk;							   // 0x0204
 	aerial_robot_energy_t AerialRobotEnergy;			   // 0x0205

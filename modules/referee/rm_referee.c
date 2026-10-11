@@ -17,6 +17,7 @@
 #include "daemon.h"
 #include "bsp_log.h"
 #include "cmsis_os.h"
+#include "bsp_dwt.h"
 
 #define RE_RX_BUFFER_SIZE 255u // 裁判系统接收缓冲区大小
 
@@ -73,9 +74,13 @@ static void JudgeReadData(uint8_t *buff)
 					break;
 				case ID_game_robot_state: // 0x0201
 					memcpy(&referee_info.GameRobotState, (buff + DATA_Offset), LEN_game_robot_state);
+					referee_info.GameRobotStateUpdateMs = (uint32_t)DWT_GetTimeline_ms();
+					referee_info.GameRobotStateValid = 1u;
 					break;
 				case ID_power_heat_data: // 0x0202
 					memcpy(&referee_info.PowerHeatData, (buff + DATA_Offset), LEN_power_heat_data);
+					referee_info.PowerHeatDataUpdateMs = (uint32_t)DWT_GetTimeline_ms();
+					referee_info.PowerHeatDataValid = 1u;
 					break;
 				case ID_game_robot_pos: // 0x0203
 					memcpy(&referee_info.GameRobotPos, (buff + DATA_Offset), LEN_game_robot_pos);

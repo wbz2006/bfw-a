@@ -45,26 +45,26 @@ void RobotInit()
 
 初始化后不要再次调用 `SEGGER_RTT_Init()`，否则已配置的波形通道会被清除。也不要同时保留原来的 `JScope_Init()` 去配置同一个 RTT 通道。
 
-## 当前使用示例：热量波形
+## 当前使用示例：发射与摩擦轮波形
 
-实际发送位置是 `application/chassis/chassis.c` 的 `ChassisTask()`，在 `ONE_BOARD` 条件下发布热量数据后调用：
+实际发送位置是 `application/shoot/shoot.c` 的 `ShootTask()`，每个机器人控制周期发送：
 
 ```c
 JScopePrintf("%f %f %f %f",
-             (float)heat_data.heat_limit,
-             (float)heat_data.current_heat,
-             0.0f,
-             0.0f);
+             shoot_cmd_recv.shoot_rate,
+             shoot_cmd_recv.cooling_rate / HEAT_CONTROL_BULLET_HEAT,
+             friction_l->measure.speed_aps,
+             friction_r->measure.speed_aps);
 ```
 
 | 波形通道（从 0 开始） | 数据 | 含义 |
 | --- | --- | --- |
-| 0 | `heat_data.heat_limit` | 裁判系统热量上限 |
-| 1 | `heat_data.current_heat` | 裁判系统当前热量 |
-| 2 | `0.0f` | 预留 |
-| 3 | `0.0f` | 预留 |
+| 0 | `shoot_cmd_recv.shoot_rate` | 热量控制目标射频 |
+| 1 | `cooling_rate / bullet_heat` | 冷却能力折算射频 |
+| 2 | `friction_l->measure.speed_aps` | 左摩擦轮实际速度 |
+| 3 | `friction_r->measure.speed_aps` | 右摩擦轮实际速度 |
 
-`RobotTask()` 的调度循环使用 `osDelay(5)`，但上述发送位于热量发布的定时分支中，按 `HEAT_CONTROL_SETTLE_PERIOD_S = 0.1f` 执行，因此这组波形的采样频率约为 10 Hz。
+`RobotTask()` 的调度循环使用 `osDelay(5)`，因此这组波形的采样频率约为 200 Hz。裁判系统热量上限和当前热量仍通过 `heat_control_data` 主题传递，若需要观察原始热量，应临时将通道映射替换为 `shoot_cmd_recv.heat_limit` 和 `shoot_cmd_recv.current_heat`。
 
 修改要观察的信号时，替换这次调用中的参数即可。应保持各通道含义固定；多个任务向同一个 RTT 通道轮流发送不同信号，会让 J-Scope 把它们当成同一组波形的连续采样点。
 
@@ -95,8 +95,8 @@ JScopePrintf("%d %u", (int)speed, (unsigned int)heat);
 1. 编译并烧录当前工程，让程序持续运行。
 2. 在 J-Scope 中选择 RTT Sampling，连接对应的 J-Link 和目标芯片。
 3. 确认识别到 `JScope_f4f4f4f4`，然后开始采样。
-4. 观察通道 0、1；当前热量示例的通道 2、3 保持为 0。
+4. 观察通道 0、1 判断目标射频是否收敛到冷却能力，观察通道 2、3 判断两侧摩擦轮是否掉速。
 
-本工程已验证 J-Scope 可以与 Live Watch 同时工作，无需仅因启用了 Live Watch 就关闭调试。模块没有发送时间戳；若 J-Scope 版本提供采样周期或时间轴设置，应按当前发送节拍约 100 ms 配置。
+本工程已验证 J-Scope 可以与 Live Watch 同时工作，无需仅因启用了 Live Watch 就关闭调试。模块没有发送时间戳；若 J-Scope 版本提供采样周期或时间轴设置，应按当前发送节拍约 5 ms 配置。
 
 
