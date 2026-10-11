@@ -159,7 +159,7 @@ static void RemoteControlSet()
     //     ; // 弹舱舵机控制,待添加servo_motor模块,关闭
 
     // 摩擦轮控制,拨轮向上打为负,向下为正
-    if (rc_data[TEMP].rc.dial < -100) // 向上超过100,打开摩擦轮
+    if (rc_data[TEMP].rc.dial < -200) // 向上超过100,打开摩擦轮
         shoot_cmd_send.friction_mode = FRICTION_ON;
     else
         shoot_cmd_send.friction_mode = FRICTION_OFF;
@@ -168,6 +168,8 @@ static void RemoteControlSet()
         shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
     else
         shoot_cmd_send.load_mode = LOAD_STOP;
+    // 调试使用
+    shoot_cmd_send.bullet_speed = SMALL_AMU_18;
 }
 
 /**
@@ -437,6 +439,9 @@ void RobotCMDTask()
         shoot_cmd_send.shoot_mode == SHOOT_ON &&
             shoot_cmd_send.friction_mode == FRICTION_ON &&
             shoot_cmd_send.load_mode == LOAD_BURSTFIRE);
+    shoot_cmd_send.heat_limit = heat_control.heat_limit;
+    shoot_cmd_send.current_heat = heat_control.current_heat;
+    shoot_cmd_send.cooling_rate = heat_control.cooling_rate;
 
     // 设置视觉发送数据,还需增加加速度和角速度数据
     // VisionSetFlag(chassis_fetch_data.enemy_color,,chassis_fetch_data.bullet_speed)

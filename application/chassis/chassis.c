@@ -297,11 +297,22 @@ void ChassisTask()
     heat_publish_elapsed += DWT_GetDeltaT(&heat_publish_dwt_cnt);
     if (heat_publish_elapsed >= HEAT_CONTROL_SETTLE_PERIOD_S)
     {
+        uint32_t now_ms = (uint32_t)DWT_GetTimeline_ms();
+        uint32_t game_state_age_ms = referee_data->GameRobotStateValid
+                                         ? now_ms - referee_data->GameRobotStateUpdateMs
+                                         : UINT32_MAX;
+        uint32_t power_heat_age_ms = referee_data->PowerHeatDataValid
+                                         ? now_ms - referee_data->PowerHeatDataUpdateMs
+                                         : UINT32_MAX;
         HeatControlData_s heat_data = {
             .current_heat = referee_data->PowerHeatData.shooter_17mm_1_barrel_heat,
             .heat_limit = referee_data->GameRobotState.shooter_barrel_heat_limit,
             .cooling_rate = referee_data->GameRobotState.shooter_barrel_cooling_value,
-            .valid = (RefereeIsOnline() && referee_data->GameRobotState.shooter_barrel_heat_limit > 0U),
+            .game_state_age_ms = game_state_age_ms,
+            .power_heat_age_ms = power_heat_age_ms,
+            .valid = (RefereeIsOnline() && referee_data->GameRobotStateValid &&
+                      referee_data->PowerHeatDataValid &&
+                      referee_data->GameRobotState.shooter_barrel_heat_limit > 0U),
         };
         do
         {
@@ -309,7 +320,8 @@ void ChassisTask()
         } while (heat_publish_elapsed >= HEAT_CONTROL_SETTLE_PERIOD_S);
         PubPushMessage(heat_data_pub, (void *)&heat_data);
 
-        JScopePrintf("%f %f %f %f", (float)heat_data.heat_limit, (float)heat_data.current_heat, 0.0f, 0.0f);
+        /* 热量波形暂时停用，JScope 当前由 ShootTask 输出摩擦轮调试量。 */
+        // JScopePrintf("%f %f %f %f", (float)heat_data.heat_limit, (float)heat_data.current_heat, 0.0f, 0.0f);
     }
 #endif
 
