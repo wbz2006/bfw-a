@@ -120,6 +120,7 @@ modules/vtx/vt02_control.c \
 modules/jam_detector/jam_detector.c \
 modules/heat_control/heat_control.c \
 modules/jscope/jscope.c \
+modules/serial_print/serial_print.c \
 application/gimbal/gimbal.c \
 application/chassis/chassis.c \
 application/shoot/shoot.c \
@@ -260,6 +261,7 @@ C_INCLUDES =  \
 -Imodules/jam_detector \
 -Imodules/heat_control \
 -Imodules/jscope \
+-Imodules/serial_print \
 -Imodules \
 -ICore/Inc
 
@@ -289,7 +291,7 @@ LIBS = -lc -lm -lnosys  \
 -l:libarm_cortexM4lf_math.a
 LIBDIR =  \
 -LMiddlewares/ST/ARM/DSP/Lib
-LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
+LDFLAGS = $(MCU) -specs=nano.specs -u _printf_float -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
 
 # default action: build all
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
