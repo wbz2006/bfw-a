@@ -72,7 +72,7 @@ void ChassisInit()
         .can_init_config.can_handle = &hcan1,
         .controller_param_init_config = {
             .speed_PID = {
-                .Kp = 4.5, // 4.5
+                .Kp = 2.0,
                 .Ki = 0,   // 0
                 .Kd = 0,   // 0
                 .IntegralLimit = 3000,
