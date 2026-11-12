@@ -2,3 +2,6 @@ build
 .cortex*
 /.assets/
 /.Doc/
+# Python tooling cache
+__pycache__/
+*.pyc
