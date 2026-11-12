@@ -75,5 +75,6 @@ typedef struct
 attitude_t *INS_Init(void);
 
 void INS_Task(void);
+uint8_t INS_IsReady(void);
 
 #endif 

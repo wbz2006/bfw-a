@@ -41,8 +41,9 @@ const float zb[3] = {0, 0, 1};
 static float dt = 0, t = 0;
 static uint32_t INS_DWT_Count = 0;
 static uint8_t INS_Init_flag = 0;                           /* INS system init flag */
+static volatile uint8_t INS_Data_Ready;
 
-static float RefTemp = 40; // 恒温设定温度
+static float RefTemp = 50; // 当前板卡自然温度约48℃, 恒温点需高于自然温度
 
 static void mpu_offset_call(void);
 static void IMU_Param_Correction(IMU_Param_t *param, float gyro[3], float accel[3]);
@@ -56,7 +57,7 @@ void BodyFrameToEarthFrame(const float *vecBF, float *vecEF, float *q);
 static void IMU_Temperature_Ctrl(void)
 {
     PIDCalculate(&TempCtrl,mpu_data.Temperature , RefTemp);
-    IMU_Temperature_Update(float_constrain(float_rounding(TempCtrl.Output), 0, UINT32_MAX));
+    IMU_Temperature_Update(float_constrain(TempCtrl.Output, 0.0f, 100.0f));
 }
 // 使用加速度计的数据初始化Roll和Pitch,而Yaw置0,这样可以避免在初始时候的姿态估计误差
 static void InitQuaternion(float *init_q4)
@@ -111,7 +112,7 @@ void mpu_get_data()
 	mpu_data.Accel[1] = ((int16_t)((mpu_buf[2]) << 8) | mpu_buf[3]) * MPU6500_ACCEL_SEN * mpu_data.AccelScale;
 
 	mpu_data.Accel[2] = ((int16_t)((mpu_buf[4]) << 8) | mpu_buf[5]) * MPU6500_ACCEL_SEN * mpu_data.AccelScale;
-	mpu_data.Temperature = (mpu_buf[6] << 8 | mpu_buf[7])/333.87f + 21;
+	mpu_data.Temperature = (int16_t)(mpu_buf[6] << 8 | mpu_buf[7])/333.87f + 21;
 
 	mpu_data.Gyro[0] = ((int16_t)((mpu_buf[8]) << 8) | mpu_buf[9]) * MPU6500_GYRO_SEN - mpu_data.GyroOffset[0];
 
@@ -164,6 +165,11 @@ attitude_t *INS_Init(void)
 	return (attitude_t *)&INS.Gyro;
 }
 
+uint8_t INS_IsReady(void)
+{
+    return INS_Data_Ready;
+}
+
 /**
 	* @brief  get the offset data of MPU6500
   * @param  
@@ -178,14 +184,30 @@ static void mpu_offset_call(void)
     int16_t mpu6500_raw_temp;
     float gyroMax[3], gyroMin[3];
     float gNormTemp, gNormMax, gNormMin;
-	float gyroDiff[3], gNormDiff;
+	static float gyroDiff[3], gNormDiff;
+
+    // 升温期间的零偏不能用于恒温后的积分; 在同一温度附近静止校准。
+    float warmup_start = DWT_GetTimeline_s();
+    float stable_start = warmup_start;
+    while (DWT_GetTimeline_s() - warmup_start < 60.0f)
+    {
+        mpu_read_bytes(MPU6500_ACCEL_XOUT_H, buf, 14);
+        mpu_data.Temperature = (int16_t)(buf[6] << 8 | buf[7])/333.87f + 21;
+        IMU_Temperature_Ctrl();
+        float now = DWT_GetTimeline_s();
+        if (fabsf(mpu_data.Temperature - RefTemp) > 0.5f)
+            stable_start = now;
+        if (now - stable_start >= 2.0f)
+            break;
+        DWT_Delay(0.001f);
+    }
 
     startTime = DWT_GetTimeline_s();
 	do
 	{
 		if (DWT_GetTimeline_s() - startTime > 15)
         {
-            SEGGER_RTT_printf(0, "imu cali timeout, use saved offset\r\n");
+			SEGGER_RTT_printf(0, "imu cali not stationary, retry before enabling motors\r\n");
             SEGGER_RTT_printf(0, "last cali offset x:%d y:%d z:%d (x1e6)\r\n",
                               (int)(mpu_data.GyroOffset[0] * 1000000.0f),
                               (int)(mpu_data.GyroOffset[1] * 1000000.0f),
@@ -202,12 +224,7 @@ static void mpu_offset_call(void)
                               fabsf(mpu_data.GyroOffset[0]) > GYRO_OFFSET_LIMIT_X,
                               fabsf(mpu_data.GyroOffset[1]) > GYRO_OFFSET_LIMIT_Y,
                               fabsf(mpu_data.GyroOffset[2]) > GYRO_OFFSET_LIMIT_Z);
-            mpu_data.GyroOffset[0] = GxOFFSET;
-            mpu_data.GyroOffset[1] = GyOFFSET;
-            mpu_data.GyroOffset[2] = GzOFFSET;
-            mpu_data.gNorm = gNORM;
-            mpu_data.TempWhenCali = 40;
-            break;
+            startTime = DWT_GetTimeline_s();
         }
 		DWT_Delay(0.005);
 		mpu_data.gNorm = 0;
@@ -224,7 +241,7 @@ static void mpu_offset_call(void)
 			mpu_data.Accel[1] = mpu6500_raw_temp * MPU6500_ACCEL_SEN;
 			mpu6500_raw_temp = (int16_t)((buf[4]) << 8) | buf[5];
 			mpu_data.Accel[2] = mpu6500_raw_temp * MPU6500_ACCEL_SEN;
-			mpu_data.Temperature = (buf[6] << 8 | buf[7])/333.87f + 21;
+			mpu_data.Temperature = (int16_t)(buf[6] << 8 | buf[7])/333.87f + 21;
 			mpu6500_raw_temp = (int16_t)((buf[8]) << 8) | buf[9];
 			mpu_data.Gyro[0] = mpu6500_raw_temp * MPU6500_GYRO_SEN;
 			mpu_data.GyroOffset[0] += mpu_data.Gyro[0];
@@ -265,8 +282,7 @@ static void mpu_offset_call(void)
 			gNormDiff = gNormMax - gNormMin;
             for (uint8_t j = 0; j < 3; ++j)
                 gyroDiff[j] = gyroMax[j] - gyroMin[j];
-            if (gNormDiff > 0.5f ||
-                gyroDiff[0] > 0.15f ||
+            if (gyroDiff[0] > 0.15f ||
                 gyroDiff[1] > 0.15f ||
                 gyroDiff[2] > 0.15f)
                 break;
@@ -280,14 +296,15 @@ static void mpu_offset_call(void)
 
 		
 
-	} while (gNormDiff > 0.5f ||
-             fabsf(mpu_data.gNorm - 9.8f) > 0.5f ||
+    // 本板静止加速度峰峰值约1.1m/s², 用重力均值和陀螺波动判断校准有效性。
+	} while (fabsf(mpu_data.gNorm - 9.8f) > 0.5f ||
              gyroDiff[0] > 0.15f ||
              gyroDiff[1] > 0.15f ||
              gyroDiff[2] > 0.15f ||
              fabsf(mpu_data.GyroOffset[0]) > GYRO_OFFSET_LIMIT_X ||
              fabsf(mpu_data.GyroOffset[1]) > GYRO_OFFSET_LIMIT_Y ||
              fabsf(mpu_data.GyroOffset[2]) > GYRO_OFFSET_LIMIT_Z);
+    mpu_data.TempWhenCali = mpu_data.Temperature;
 	mpu_data.AccelScale = 9.81/mpu_data.gNorm;
     SEGGER_RTT_printf(0, "gyro offset x:%d y:%d z:%d (x1e6)\r\n",
                       (int)(mpu_data.GyroOffset[0] * 1000000.0f),
@@ -363,6 +380,7 @@ void INS_Task(void)
         INS.Pitch = QEKF_INS.Roll;
         INS.Roll = QEKF_INS.Pitch;
         INS.YawTotalAngle = QEKF_INS.YawTotalAngle;
+        INS_Data_Ready = 1U;
 
     }
 
