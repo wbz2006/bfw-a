@@ -1,6 +1,7 @@
 // app
 #include "robot_def.h"
 #include "robot_cmd.h"
+#include "gimbal.h"
 // module
 #include "remote_control.h"
 #include "vt02_control.h"
@@ -84,8 +85,6 @@ void RobotCMDInit()
     };
     cmd_can_comm = CANCommInit(&comm_conf);
 #endif // GIMBAL_BOARD
-    gimbal_cmd_send.pitch = 0;
-
     robot_state = ROBOT_READY; // 启动时机器人进入工作模式,后续加入所有应用初始化完成之后再进入
 }
 
@@ -143,7 +142,7 @@ static void RemoteControlSet()
     // 左侧开关状态为[下],或视觉未识别到目标,纯遥控器拨杆控制
     if (switch_is_down(rc_data[TEMP].rc.switch_left) || vision_recv_data->target_state == NO_TARGET)
     { // 按照摇杆的输出大小进行角度增量,增益系数需调整
-        gimbal_cmd_send.yaw -= 0.005f * (float)rc_data[TEMP].rc.rocker_l_;
+        gimbal_cmd_send.yaw -= 0.001f * (float)rc_data[TEMP].rc.rocker_l_;
         gimbal_cmd_send.pitch += 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
     }
     // 云台软件限位
@@ -416,11 +415,20 @@ void RobotCMDTask()
     chassis_fetch_data = *(Chassis_Upload_Data_s *)CANCommGet(cmd_can_comm);
 #endif // GIMBAL_BOARD
     SubGetMessage(shoot_feed_sub, &shoot_fetch_data);
-    SubGetMessage(gimbal_feed_sub, &gimbal_fetch_data);
+    uint8_t gimbal_feed_updated = SubGetMessage(gimbal_feed_sub, &gimbal_fetch_data);
+    if (!gimbal_startup_ready && gimbal_feed_updated &&
+        gimbal_fetch_data.gimbal_imu_data.Pitch >= PITCH_MIN_ANGLE &&
+        gimbal_fetch_data.gimbal_imu_data.Pitch <= PITCH_MAX_ANGLE)
+    {
+        gimbal_cmd_send.yaw = gimbal_fetch_data.gimbal_imu_data.YawTotalAngle;
+        gimbal_cmd_send.pitch = gimbal_fetch_data.gimbal_imu_data.Pitch;
+        gimbal_startup_ready = 1U;
+    }
 
     // 根据gimbal的反馈值计算云台和底盘正方向的夹角,不需要传参,通过static私有变量完成
     CalcOffsetAngle();
     // 根据遥控器左侧开关,确定当前使用的控制模式为遥控器调试还是键鼠
+    gimbal_cmd_send.yaw_speed_feedforward = 0.0f;
     if (switch_is_down(rc_data[TEMP].rc.switch_left)) // 遥控器左侧开关状态为[下],遥控器控制
         RemoteControlSet();
     else if (switch_is_up(rc_data[TEMP].rc.switch_left)) // 遥控器左侧开关状态为[上],图传控制
@@ -430,6 +438,17 @@ void RobotCMDTask()
     GimbalCommandLimit();
 
     EmergencyHandler(); // 处理模块离线和遥控器急停等紧急情况
+
+    if (gimbal_startup_ready && gimbal_cmd_send.gimbal_mode != GIMBAL_ZERO_FORCE)
+    {
+        GimbalSineTestUpdate(&gimbal_cmd_send.yaw, &gimbal_cmd_send.pitch);
+    }
+    else
+        gimbal_sine_test.axes = 0U;
+
+    GimbalSpeedFeedforwardUpdate(gimbal_cmd_send.yaw,
+                                 gimbal_startup_ready && gimbal_cmd_send.gimbal_mode != GIMBAL_ZERO_FORCE,
+                                 &gimbal_cmd_send.yaw_speed_feedforward);
 
     /* 热量按裁判系统 10 Hz 结算，模块内部从消息中心读取最新热量数据。 */
     shoot_cmd_send.shoot_rate = HeatControlCalculate(
